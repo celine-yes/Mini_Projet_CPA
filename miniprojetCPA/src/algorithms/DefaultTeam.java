@@ -146,17 +146,98 @@ public class DefaultTeam {
 	  
 	  
   public Tree2D calculSteinerBudget(ArrayList<Point> points, int edgeThreshold, ArrayList<Point> hitPoints) {
-    //REMOVE >>>>>
-    Tree2D leafX = new Tree2D(new Point(700,400),new ArrayList<Tree2D>());
-    Tree2D leafY = new Tree2D(new Point(700,500),new ArrayList<Tree2D>());
-    Tree2D leafZ = new Tree2D(new Point(800,450),new ArrayList<Tree2D>());
-    ArrayList<Tree2D> subTrees = new ArrayList<Tree2D>();
-    subTrees.add(leafX);
-    subTrees.add(leafY);
-    subTrees.add(leafZ);
-    Tree2D steinerTree = new Tree2D(new Point(750,450),subTrees);
-    //<<<<< REMOVE
+	  final double budget = 1664.0; // Budget fixé
+	  int n = points.size();
+	  int m = hitPoints.size();
 
-    return steinerTree;
+	  //graphe pondéré complet K
+	  ArrayList<Edge> K = new ArrayList<Edge>();
+	  for (int i = 0; i < m; i++) {
+	      for (int j = 0; j < m; j++) {
+	          int indexI = points.indexOf(hitPoints.get(i));
+	          int indexJ = points.indexOf(hitPoints.get(j));
+	          K.add(new Edge(points.get(indexI), points.get(indexJ), indexI, indexJ)) ;
+	      }
+	  }
+	 
+	  K = sort(K);
+
+	  ArrayList<Edge> kruskal = new ArrayList<Edge>();
+	  Edge current;
+	  LabelPoint forest = new LabelPoint(points);
+	  while (K.size()!=0) {
+	    current = K.remove(0);
+	    if (forest.getLabel(current.pointA)!=forest.getLabel(current.pointB)) {
+	      kruskal.add(current);
+	      forest.setLabel(forest.getLabel(current.pointA),forest.getLabel(current.pointB));
+	    }
+	  }
+	  
+	 kruskal = sort(kruskal);
+	 
+	// Calcul du chemin le plus court pour chaque paire de points
+	  int[][] path = calculShortestPaths(points, edgeThreshold);
+	  ArrayList<Edge> H = new ArrayList<Edge>();
+	  double currentBudget = budget; // Initialise le budget restant
+	  Point firstHPoint = hitPoints.get(0);
+	  Point firstPoint = firstHPoint;
+	  ArrayList<Point> remainingHitPoints = new ArrayList<Point>(hitPoints);
+	  remainingHitPoints.remove(firstPoint); // Enlever le premier hitPoint déjà traité
+
+	  // Continuer tant qu'il reste du budget et qu'il y a des hitPoints à traiter
+	  while (currentBudget > 0 && !remainingHitPoints.isEmpty()) {
+	      Edge shortestEdge = null;
+	      double shortestDistance = Double.POSITIVE_INFINITY;
+	      Point endPoint = null;
+
+	      // Trouver le chemin le plus court vers un nouveau hitPoint
+	      for (Point hitPoint : remainingHitPoints) {
+	          int indexStart = points.indexOf(firstPoint);
+	          int indexEnd = points.indexOf(hitPoint);
+	          if (path[indexStart][indexEnd] != indexStart) { // Si un chemin existe
+	              double distance = 0;
+	              int currentIndex = indexStart;
+	              int nextIndex = path[currentIndex][indexEnd];
+
+	              // Calculer la distance totale du chemin
+	              while (currentIndex != indexEnd) {
+	                  distance += points.get(currentIndex).distance(points.get(nextIndex));
+	                  currentIndex = nextIndex;
+	                  nextIndex = path[currentIndex][indexEnd];
+	              }
+
+	              // Vérifier si c'est le chemin le plus court dans le budget
+	              if (distance < shortestDistance && distance <= currentBudget) {
+	                  shortestDistance = distance;
+	                  shortestEdge = new Edge(firstPoint, hitPoint, indexStart, indexEnd);
+	                  endPoint = hitPoint;
+	              }
+	          }
+	      }
+
+	      // Ajouter le chemin le plus court à H si trouvé
+	      if (shortestEdge != null) {
+	          currentBudget -= shortestDistance; // Mettre à jour le budget
+	          remainingHitPoints.remove(endPoint); // Enlever le hitPoint connecté
+
+	          // Ajouter toutes les arêtes du chemin à H
+	          int currentIndex = shortestEdge.indexA;
+	          int endIndex = shortestEdge.indexB;
+	          while (currentIndex != endIndex) {
+	              int nextIndex = path[currentIndex][endIndex];
+	              H.add(new Edge(points.get(currentIndex), points.get(nextIndex), currentIndex, nextIndex));
+	              currentIndex = nextIndex;
+	          }
+
+	          firstPoint = endPoint; // Mettre à jour le point de départ pour la prochaine itération
+	      } else {
+	          // Aucun chemin trouvé dans le budget restant, arrêter la boucle
+	          break;
+	      }
+	  }
+
+	  // Convertir H en Tree2D
+	  return edgesToTree(H, hitPoints.get(0));
   }
+  
 }
